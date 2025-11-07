@@ -48,14 +48,23 @@ jobs:
               per_page: 10
             });
 
-            // Look for recent backport failure comments
-            const recentFailure = comments.data.some(comment =>
+            // Look for recent backport failure comments and extract branch info
+            const recentFailureComment = comments.data.find(comment =>
               comment.created_at > new Date(Date.now() - 60000).toISOString() &&
               comment.body.includes('Backport failed') &&
               comment.body.includes('unable to cherry-pick')
             );
 
-            if (recentFailure) {
+            if (recentFailureComment) {
+              // Extract target branch from the failure comment
+              // Pattern: "Backport failed for `prod`" or ".worktree/backport-18-to-prod"
+              const targetBranchMatch = recentFailureComment.body.match(/Backport failed for `([^`]+)`/);
+              const worktreeMatch = recentFailureComment.body.match(/\.worktree\/backport-\d+-to-([^\s]+)/);
+
+              const targetBranch = targetBranchMatch ? targetBranchMatch[1] : (worktreeMatch ? worktreeMatch[1] : 'TARGET_BRANCH');
+              const branchName = `backport-${context.issue.number}-to-${targetBranch}`;
+              const worktreePath = `.worktree/backport-${context.issue.number}-to-${targetBranch}`;
+
               const comment = `
             ### After resolving conflicts, continue with:
 
@@ -65,14 +74,17 @@ jobs:
             # Continue the cherry-pick
             git cherry-pick --continue
             # Push the branch to GitHub
-            git push --set-upstream origin <branch-name>
+            git push --set-upstream origin ${branchName}
             # Go back to the original working tree
             cd ../..
             # Delete the working tree
-            git worktree remove .worktree/backport-${context.issue.number}-to-<target-branch>
+            git worktree remove ${worktreePath}
             \`\`\`
 
-            Then create a pull request where the \`base\` branch is the target branch and the \`compare\`/\`head\` branch is the one you just pushed.
+            Then create a pull request using the GitHub CLI:
+            \`\`\`bash
+            gh pr create --base ${targetBranch} --head ${branchName} --title "[Backport ${targetBranch}] ${context.payload.pull_request.title}" --body "Backport of #${context.issue.number} to \\\`${targetBranch}\\\`."
+            \`\`\`
             `;
 
               await github.rest.issues.createComment({
