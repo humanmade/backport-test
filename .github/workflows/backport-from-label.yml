@@ -12,7 +12,7 @@ permissions:
 jobs:
   backport:
     if: github.event.pull_request.merged == true
-    uses: humanmade/backport-test/.github/workflows/backport-module.yml@main
+    uses: humanmade/backport-test/.github/workflows/backport-module.yml@master
     # Optional: customize the label pattern
     # with:
     #   label_pattern: '^backport ([^ ]+)$'
